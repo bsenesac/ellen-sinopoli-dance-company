@@ -7,7 +7,7 @@ if ($_SERVER['SERVER_NAME'] == 'localhost') {
     (Dotenv\Dotenv::createImmutable($_SERVER['DOCUMENT_ROOT']))->load();
 } else {
     // Load our environment variables from the .env file for prod
-    (Dotenv\Dotenv::createImmutable('/var/www/vhosts/sanborn.dev.briansenesac.com/httpdocs'))->load();
+    (Dotenv\Dotenv::createImmutable('/var/www/vhosts/sinopolidances.org/httpdocs'))->load();
 }
 
 /**
