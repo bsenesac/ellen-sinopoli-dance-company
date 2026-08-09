@@ -470,6 +470,9 @@ add_action( 'admin_post_ellen_save_footer_settings', function() {
 } );
 
 function ellen_footer_settings_page() {
+	// Enqueue here as well as admin_enqueue_scripts so custom admin-menu configurations cannot omit the media modal.
+	wp_enqueue_media();
+	wp_enqueue_script( 'jquery-ui-sortable' );
 	$logos = ellen_get_footer_supporting_logos();
 	?>
 	<div class="wrap">
@@ -506,14 +509,18 @@ function ellen_footer_settings_page() {
 		.ellen-logo-row{display:flex;align-items:center;gap:18px;max-width:950px;margin:12px 0;padding:16px;background:#fff;border:1px solid #ccd0d4}.ellen-logo-handle{cursor:move;color:#646970}.ellen-logo-preview{width:150px;text-align:center}.ellen-logo-preview img{max-width:150px;max-height:90px}.ellen-logo-fields{display:grid;grid-template-columns:1fr 1fr;gap:10px 16px;flex:1}.ellen-logo-fields label{display:flex;flex-direction:column;gap:4px}.ellen-logo-fields .ellen-checkbox{display:block}.ellen-remove-logo{margin-left:auto}.ellen-logo-placeholder{height:125px;border:2px dashed #72aee6;margin:12px 0;max-width:950px}
 	</style>
 	<script>
-	(function($){
+	jQuery(function($){
 		var list=$('#ellen-footer-logos');
 		function reindex(){list.children('.ellen-logo-row').each(function(index){$(this).find('[name]').each(function(){this.name=this.name.replace(/supporting_logos\[\d+\]/,'supporting_logos['+index+']');});});}
-		list.sortable({handle:'.ellen-logo-handle',placeholder:'ellen-logo-placeholder',update:reindex});
-		list.on('click','.ellen-select-logo',function(){var row=$(this).closest('.ellen-logo-row'),frame=wp.media({title:'Choose a supporting logo',button:{text:'Use this logo'},multiple:false});frame.on('select',function(){var image=frame.state().get('selection').first().toJSON();row.find('.ellen-image-id').val(image.id);row.find('.ellen-image-url').val(image.url);row.find('.ellen-logo-preview').html('<img src="'+image.url+'" alt="">');if(!row.find('.ellen-logo-alt').val()){row.find('.ellen-logo-alt').val(image.alt||image.title||'');}});frame.open();});
+		if($.fn.sortable){list.sortable({handle:'.ellen-logo-handle',placeholder:'ellen-logo-placeholder',update:reindex});}
+		list.on('click','.ellen-select-logo',function(){
+			if(typeof window.wp==='undefined'||!wp.media){window.alert('The WordPress Media Library did not load. Please refresh this page and try again.');return;}
+			var row=$(this).closest('.ellen-logo-row'),frame=wp.media({title:'Choose a supporting logo',button:{text:'Use this logo'},multiple:false});
+			frame.on('select',function(){var image=frame.state().get('selection').first().toJSON();row.find('.ellen-image-id').val(image.id);row.find('.ellen-image-url').val(image.url);row.find('.ellen-logo-preview').html('<img src="'+image.url+'" alt="">');if(!row.find('.ellen-logo-alt').val()){row.find('.ellen-logo-alt').val(image.alt||image.title||'');}});frame.open();
+		});
 		list.on('click','.ellen-remove-logo',function(){$(this).closest('.ellen-logo-row').remove();reindex();});
 		$('#ellen-add-logo').on('click',function(){list.append('<div class="ellen-logo-row"><span class="dashicons dashicons-move ellen-logo-handle" title="Drag to reorder"></span><div class="ellen-logo-preview"></div><div class="ellen-logo-fields"><input type="hidden" class="ellen-image-id" name="supporting_logos[0][image_id]" value="0"><input type="hidden" class="ellen-image-url" name="supporting_logos[0][image_url]" value=""><button type="button" class="button ellen-select-logo">Choose Logo</button><label>Alternative text<input type="text" class="regular-text ellen-logo-alt" name="supporting_logos[0][alt]" value=""></label><label>Optional link<input type="url" class="regular-text" name="supporting_logos[0][link_url]" value="" placeholder="https://"></label><label class="ellen-checkbox"><input type="checkbox" name="supporting_logos[0][new_tab]" value="1"> Open link in a new tab</label></div><button type="button" class="button-link-delete ellen-remove-logo">Remove</button></div>');reindex();});
-	})(jQuery);
+	});
 	</script>
 	<?php
 }
