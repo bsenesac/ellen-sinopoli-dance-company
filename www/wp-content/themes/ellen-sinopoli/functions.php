@@ -250,10 +250,13 @@ add_shortcode( 'artist-highlight', 'artistHighlight' );
 
 function upcomingEvents($attr = array()) {
 	$attr = shortcode_atts(array(
-		'section' => '',
-		'limit'   => -1,
+		'section'    => '',
+		'categories' => '',
+		'limit'      => -1,
+		'el_class'   => '',
 	), $attr, 'upcoming-events');
 	$section = strtolower(trim($attr['section']));
+	$categories = array_filter(array_map('sanitize_title', explode(',', (string) $attr['categories'])));
 	$limit = filter_var($attr['limit'], FILTER_VALIDATE_INT);
 	$limit = ($limit === false || $limit === 0 || $limit < -1) ? -1 : $limit;
 	$sections = array(
@@ -264,18 +267,26 @@ function upcomingEvents($attr = array()) {
 	);
 
 	$args = array(
-		'posts_per_page' => $limit,
+		'posts_per_page' => -1,
 		'post_type'       => 'tribe_events',
 		'post_status'     => 'publish',
-		'eventDisplay'    => 'upcoming',
-		'start_date'      => 'now',
-		'orderby'         => 'event_date',
-		'order'           => 'ASC',
+		'meta_key'        => '_EventStartDate',
+		'orderby'         => 'meta_value',
+		'order'           => 'DESC',
 	);
 
 	// A supplied section must be recognized; otherwise return no events rather
 	// than accidentally exposing every category because of a shortcode typo.
-	if ($section !== '') {
+	if ($categories) {
+		$args['tax_query'] = array(
+			array(
+				'taxonomy' => 'tribe_events_cat',
+				'field'    => 'slug',
+				'terms'    => $categories,
+				'operator' => 'IN',
+			),
+		);
+	} elseif ($section !== '') {
 		if (!isset($sections[$section])) {
 			return '';
 		}
@@ -288,15 +299,24 @@ function upcomingEvents($attr = array()) {
 		);
 	}
 
-	// Let The Events Calendar build the date query. In addition to recurring
-	// events, this correctly respects its "Hide From Event Listings" setting.
-	$events = function_exists('tribe_get_events') ? tribe_get_events($args) : get_posts($args);
+	// This page intentionally contains both upcoming and previous performances,
+	// so do not use the calendar plugin's upcoming-only query here.
+	$events = get_posts($args);
+	$events = array_values(array_filter($events, function($event) {
+		$hidden = strtolower(trim((string) get_post_meta($event->ID, '_EventHideFromUpcoming', true)));
+		return !in_array($hidden, array('1', 'yes', 'true', 'on'), true);
+	}));
+	if ($limit > 0) {
+		$events = array_slice($events, 0, $limit);
+	}
 	if (!$events) {
 		return '<p class="no-upcoming-events">There are currently no upcoming events.</p>';
 	}
 
 	$run = 1;
-	$output = '<ul>';
+	$extra_classes = array_filter(array_map('sanitize_html_class', preg_split('/\s+/', (string) $attr['el_class'])));
+	$classes = trim('esdc-events ' . implode(' ', $extra_classes));
+	$output = '<div class="' . esc_attr($classes) . '"><ul>';
 	foreach ($events as $event) {
 		$permalink = get_the_permalink($event->ID);
 		$event_thumb = wp_get_attachment_url(get_post_thumbnail_id($event->ID), 'full');
@@ -317,11 +337,61 @@ function upcomingEvents($attr = array()) {
 		$output .= '</li>';
 		$run++;
 	}
-	$output .= '</ul>';
+	$output .= '</ul></div>';
 
 	return $output;
 }
 add_shortcode( 'upcoming-events', 'upcomingEvents' );
+
+/**
+ * Expose the event listing as a WPBakery element with live Event Categories.
+ */
+function esdc_register_upcoming_events_element() {
+	if (!function_exists('vc_map')) {
+		return;
+	}
+
+	$category_options = array();
+	$terms = get_terms(array(
+		'taxonomy'   => 'tribe_events_cat',
+		'hide_empty' => false,
+	));
+	if (!is_wp_error($terms)) {
+		foreach ($terms as $term) {
+			$category_options[$term->name] = $term->slug;
+		}
+	}
+
+	vc_map(array(
+		'name'        => __('ESDC Event Listings', 'ellen-sinopoli'),
+		'base'        => 'upcoming-events',
+		'category'    => __('ESDC Components', 'ellen-sinopoli'),
+		'description' => __('Display events from one or more Event Categories.', 'ellen-sinopoli'),
+		'params'      => array(
+			array(
+				'type'        => 'checkbox',
+				'heading'     => __('Event Categories', 'ellen-sinopoli'),
+				'param_name'  => 'categories',
+				'value'       => $category_options,
+				'admin_label' => true,
+				'description' => __('Select one or more categories. Leave blank to show events from every category.', 'ellen-sinopoli'),
+			),
+			array(
+				'type'        => 'textfield',
+				'heading'     => __('Maximum Number of Events', 'ellen-sinopoli'),
+				'param_name'  => 'limit',
+				'value'       => '-1',
+				'description' => __('Use -1 to show every matching event.', 'ellen-sinopoli'),
+			),
+			array(
+				'type'       => 'textfield',
+				'heading'    => __('Extra CSS Class', 'ellen-sinopoli'),
+				'param_name' => 'el_class',
+			),
+		),
+	));
+}
+add_action('vc_before_init', 'esdc_register_upcoming_events_element');
 
 
 function additionalRepertory($attr=[]) {
