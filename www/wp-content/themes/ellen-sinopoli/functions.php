@@ -267,22 +267,10 @@ function upcomingEvents($attr = array()) {
 		'posts_per_page' => $limit,
 		'post_type'       => 'tribe_events',
 		'post_status'     => 'publish',
-		'meta_key'        => '_EventStartDate',
-		'orderby'         => 'meta_value',
+		'eventDisplay'    => 'upcoming',
+		'start_date'      => 'now',
+		'orderby'         => 'event_date',
 		'order'           => 'ASC',
-		'meta_query'      => array(
-			'relation' => 'AND',
-			array(
-				'key'     => '_EventEndDate',
-				'value'   => current_time('mysql'),
-				'compare' => '>=',
-				'type'    => 'DATETIME',
-			),
-			array(
-				'key'     => '_EventHideFromUpcoming',
-				'compare' => 'NOT EXISTS',
-			),
-		),
 	);
 
 	// A supplied section must be recognized; otherwise return no events rather
@@ -300,7 +288,9 @@ function upcomingEvents($attr = array()) {
 		);
 	}
 
-	$events = get_posts($args);
+	// Let The Events Calendar build the date query. In addition to recurring
+	// events, this correctly respects its "Hide From Event Listings" setting.
+	$events = function_exists('tribe_get_events') ? tribe_get_events($args) : get_posts($args);
 	if (!$events) {
 		return '<p class="no-upcoming-events">There are currently no upcoming events.</p>';
 	}
