@@ -248,62 +248,88 @@ function artistHighlight() {
 }
 add_shortcode( 'artist-highlight', 'artistHighlight' );
 
-function upcomingEvents($attr=[]) {
-	
-	$args = array( 	'posts_per_page' => -1, 
-                    'post_type' => 'tribe_events',
-                    'post_status' => 'publish',
-                    'meta_key' => '_EventStartDate',
-                    'orderby' => 'meta_value',
-                    'order' => 'DESC'				
-    );
-	
-	if( $attr['section'] == 'performances' ) {
-          $sectionArgs = array(
-              'taxonomy' => 'tribe_events_cat',
-              'field' => 'slug',
-              'terms' => 'performances-and-repertory'
-          );
-	}
-	
-	if( $attr['section'] == 'education' ) {
-          $sectionArgs = array(
-              'taxonomy' => 'tribe_events_cat',
-              'field' => 'slug',
-              'terms' => 'education-and-outreach'
-          );
-	}
-	
-	if( $attr['section'] == 'fundraising' ) {
-          $sectionArgs = array(
-              'taxonomy' => 'tribe_events_cat',
-              'field' => 'slug',
-              'terms' => 'fundraising'
-          );
+function upcomingEvents($attr = array()) {
+	$attr = shortcode_atts(array(
+		'section' => '',
+		'limit'   => -1,
+	), $attr, 'upcoming-events');
+	$section = strtolower(trim($attr['section']));
+	$limit = filter_var($attr['limit'], FILTER_VALIDATE_INT);
+	$limit = ($limit === false || $limit === 0 || $limit < -1) ? -1 : $limit;
+	$sections = array(
+		'performance'  => 'performances-and-repertory',
+		'performances' => 'performances-and-repertory',
+		'education'    => 'education-and-outreach',
+		'fundraising'  => 'fundraising',
+	);
+
+	$args = array(
+		'posts_per_page' => $limit,
+		'post_type'       => 'tribe_events',
+		'post_status'     => 'publish',
+		'meta_key'        => '_EventStartDate',
+		'orderby'         => 'meta_value',
+		'order'           => 'ASC',
+		'meta_query'      => array(
+			'relation' => 'AND',
+			array(
+				'key'     => '_EventEndDate',
+				'value'   => current_time('mysql'),
+				'compare' => '>=',
+				'type'    => 'DATETIME',
+			),
+			array(
+				'key'     => '_EventHideFromUpcoming',
+				'compare' => 'NOT EXISTS',
+			),
+		),
+	);
+
+	// A supplied section must be recognized; otherwise return no events rather
+	// than accidentally exposing every category because of a shortcode typo.
+	if ($section !== '') {
+		if (!isset($sections[$section])) {
+			return '';
+		}
+		$args['tax_query'] = array(
+			array(
+				'taxonomy' => 'tribe_events_cat',
+				'field'    => 'slug',
+				'terms'    => $sections[$section],
+			),
+		);
 	}
 
-	
-	// if only the location is set
-	if( isset( $sectionArgs ) )
-		$args['tax_query'] = array($sectionArgs);	
-	
-    $events = get_posts( $args );
-    $run=1;		
-    // Loop through the events, displaying the title and content for each
-    echo '<ul>';
-    foreach ( $events as $event ) :
-        echo '<li class="event-' . $run . '">';
-            $eventThumb = wp_get_attachment_url( get_post_thumbnail_id($event->ID), 'full' );
-            echo '<a href="' . get_the_permalink($event->ID) . '">';
-                echo '<div class="image-box" style="background-image: url(\'' . $eventThumb . '\')"></div>';
-            echo '</a>';
-            echo '<h3>' . $event->post_title . '</h3>';
-            echo '<p class="date">' . date("D M j, Y", strtotime(get_post_meta($event->ID)['_EventStartDate'][0])) . '</p>';
-            echo '<a class="learn-more" href="' . get_the_permalink($event->ID) . '">Find Out More</a>';
-        echo '</li>';
-        $run++;
-    endforeach;
-    echo '<ul>';
+	$events = get_posts($args);
+	if (!$events) {
+		return '<p class="no-upcoming-events">There are currently no upcoming events.</p>';
+	}
+
+	$run = 1;
+	$output = '<ul>';
+	foreach ($events as $event) {
+		$permalink = get_the_permalink($event->ID);
+		$event_thumb = wp_get_attachment_url(get_post_thumbnail_id($event->ID), 'full');
+		$event_start = get_post_meta($event->ID, '_EventStartDate', true);
+		$event_date = function_exists('tribe_get_start_date')
+			? tribe_get_start_date($event->ID, false, 'D M j Y')
+			: wp_date('D M j Y', strtotime($event_start));
+
+		$output .= '<li class="event-' . esc_attr($run) . '">';
+		if ($event_thumb) {
+			$output .= '<a href="' . esc_url($permalink) . '" aria-label="View ' . esc_attr($event->post_title) . '">';
+			$output .= '<div class="image-box" role="img" aria-label="' . esc_attr($event->post_title) . '" style="background-image: url(\'' . esc_url($event_thumb) . '\')"></div>';
+			$output .= '</a>';
+		}
+		$output .= '<h3>' . esc_html($event->post_title) . '</h3>';
+		$output .= '<p class="date"><time datetime="' . esc_attr(date('c', strtotime($event_start))) . '">' . esc_html($event_date) . '</time></p>';
+		$output .= '<a class="learn-more" href="' . esc_url($permalink) . '">Find Out More</a>';
+		$output .= '</li>';
+		$run++;
+	}
+	$output .= '</ul>';
+
+	return $output;
 }
 add_shortcode( 'upcoming-events', 'upcomingEvents' );
 
